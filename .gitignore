@@ -88,3 +88,4 @@ ENV/
 # Rope project settings
 .ropeproject
 hw1/MNIST_data/
+MNIST_data/
