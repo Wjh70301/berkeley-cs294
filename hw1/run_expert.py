@@ -49,9 +49,11 @@ def main():
             steps = 0
             while not done:
                 action = policy_fn(obs[None,:])
+                # print(action[0])
                 observations.append(obs)
                 actions.append(action)
                 obs, r, done, _ = env.step(action)
+                # print(obs, r, done)
                 totalr += r
                 steps += 1
                 if args.render:
@@ -65,6 +67,7 @@ def main():
         print('mean return', np.mean(returns))
         print('std of return', np.std(returns))
 
+        print(np.array(actions).shape)
         expert_data = {'observations': np.array(observations),
                        'actions': np.array(actions)}
 

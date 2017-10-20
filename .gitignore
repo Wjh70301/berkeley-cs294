@@ -90,4 +90,5 @@ ENV/
 
 hw1/MNIST_data/
 MNIST_data/
-train_test.pkl
+train_test*.pkl
+train_test_data
