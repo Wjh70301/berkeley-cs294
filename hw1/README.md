@@ -16,3 +16,12 @@ In `experts/`, the provided expert policies are:
 * Walker2d-v1.pkl
 
 The name of the pickle file corresponds to the name of the gym environment.
+
+
+# setup
+
+```
+conda create -p venv/ python=3.5 numpy scipy matplotlib theano ipython jupyter
+source activate venv/
+pip install gym  mujoco-py==0.5.7 tensorflow==1.3
+ ```
