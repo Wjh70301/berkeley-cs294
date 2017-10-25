@@ -3,6 +3,7 @@ import sys
 sys.path.insert(0, '..')
 import pickle
 
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -67,7 +68,6 @@ def train(train_op, metric, X_tv, y_tv, batch_size, num_epochs):
         mse_test.append(metric.eval(feed_dict={x_plh: X_test, y_plh: y_test}))
 
     # tf.logging.info(mse_tv)
-    saver.save(sess, model_prefix)
     return mse_tv, mse_test
 
 
@@ -106,7 +106,10 @@ if __name__ == "__main__":
     expert_pkl = '../experts/Walker2d-v1.pkl'
     training_data_pkl = '../train_test_data/Walker2d-10-rollouts-200.pkl'
 
-    model_prefix = './lele/a'
+    num_dagger_rounds = 30
+    num_epochs_per_train = 1000
+    model_prefix = './dagger-models/trained-with-dagger-{0}-by-{1}-epochs/a'.format(
+        num_dagger_rounds, num_epochs_per_train)
 
     tf.logging.info('loading training data ...')
     with open(training_data_pkl, 'rb') as inf:
@@ -158,11 +161,13 @@ if __name__ == "__main__":
         def pred_action_by_expert(obs):
             return policy_fn(obs.reshape(1, -1))
 
-        tf.logging.info('start train-daggering ...')
-        while True:
+        count = 0
+        while count < num_dagger_rounds:
+            tf.logging.info('start train-Dagger round {0}/{1}'.format(count + 1, num_dagger_rounds))
             tf.logging.info('training ...')
             mse_tv, mse_test = train(
-                train_op, mse, X_tv, y_tv, batch_size=128, num_epochs=100)
+                train_op, mse, X_tv, y_tv, batch_size=128,
+                num_epochs=num_epochs_per_train)
             mse_tv_list.extend(mse_tv)
             mse_test_list.extend(mse_test)
 
@@ -172,12 +177,19 @@ if __name__ == "__main__":
             X_tv = np.concatenate([X_tv, nX_dagger])
             y_tv = np.concatenate([y_tv, ny_dagger])
 
+            count += 1
             # break
 
+            saver.save(sess, model_prefix)
 
-    # out_f = os.path.join('.', 'test_mse.csv'.format(hidden_layer_size))
-        # with open(out_f, 'wt') as opf:
-        #     opf.write('{0}\t{1}\n'.format(
-        #         mse.eval(feed_dict={x_plh: X_tv, y_plh: y_tv}),
-        #         mse.eval(feed_dict={x_plh: X_test, y_plh: y_test}),
-        #     ))
+    out_df = pd.DataFrame(list(zip(mse_tv_list, mse_test_list)),
+                          columns=['tv_mse', 'test_mse'])
+    out_df.to_csv(
+        os.path.join(
+            os.path.dirname(model_prefix), 'mse_train_test.csv'),
+        index=False)
+
+    # plt.plot(mse_train_list, label='train')
+    # plt.plot(mse_test_list, label='test')
+    # plt.xlabel('# epoch')
+    # plt.ylabel('MSE')
