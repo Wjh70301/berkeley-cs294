@@ -12,11 +12,14 @@ import tf_util
 import load_policy
 
 # task = 'Ant-v1'
-task = 'Humanoid-v1'
-num_rollouts = 500
-max_timesteps = 2000
+# task = 'Humanoid-v1'
+task = 'Walker2d'
+version = 'v1'
+task = task + '-' + verison
+num_rollouts = 10
+max_timesteps = 200
 train_ratio = 0.8
-out_pkl = './section-3-behavioral-cloning/humanoid_train_test-50-rollouts.pkl'
+out_pkl = './train_test_data/{0}-{1}-rollouts-{2}.pkl'.format(task, num_rollouts, max_timesteps)
 
 policy_fn = load_policy.load_policy('./experts/{0}.pkl'.format(task))
 
@@ -53,4 +56,3 @@ print(X_tv.shape, X_test.shape, y_tv.shape, y_test.shape)
 
 with open(out_pkl, 'wb') as opf:
     pickle.dump([X_tv, y_tv, X_test, y_test], opf)
-
