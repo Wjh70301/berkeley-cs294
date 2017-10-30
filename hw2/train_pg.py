@@ -12,12 +12,13 @@ from multiprocessing import Process
 # Utilities
 #============================================================================================#
 
+
 def build_mlp(
-        input_placeholder, 
+        input_placeholder,
         output_size,
-        scope, 
-        n_layers=2, 
-        size=64, 
+        scope,
+        n_layers=2,
+        size=64,
         activation=tf.tanh,
         output_activation=None
         ):
@@ -34,8 +35,14 @@ def build_mlp(
     #========================================================================================#
 
     with tf.variable_scope(scope):
-        # YOUR_CODE_HERE
-        pass
+        hidden_layer = input_placeholder
+        for _ in range(n_layers):
+            hidden_layer = tf.layers.dense(
+                hidden_layer, size, activation)
+        output_layer = tf.layers.dense(
+            hidden_layer, output_size, output_activation)
+    return output_layer
+
 
 def pathlength(path):
     return len(path["reward"])
