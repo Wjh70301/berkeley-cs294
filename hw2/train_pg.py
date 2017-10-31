@@ -48,23 +48,21 @@ def pathlength(path):
     return len(path["reward"])
 
 
-
 #============================================================================================#
 # Policy Gradient
 #============================================================================================#
-
 def train_PG(exp_name='',
              env_name='CartPole-v0',
-             n_iter=100, 
-             gamma=1.0, 
-             min_timesteps_per_batch=1000, 
+             n_iter=100,
+             gamma=1.0,
+             min_timesteps_per_batch=1000,
              max_path_length=None,
-             learning_rate=5e-3, 
-             reward_to_go=True, 
-             animate=True, 
-             logdir=None, 
+             learning_rate=5e-3,
+             reward_to_go=True,
+             animate=True,
+             logdir=None,
              normalize_advantages=True,
-             nn_baseline=False, 
+             nn_baseline=False,
              seed=0,
              # network arguments
              n_layers=1,
@@ -88,7 +86,7 @@ def train_PG(exp_name='',
 
     # Make the gym environment
     env = gym.make(env_name)
-    
+
     # Is this env continuous, or discrete?
     discrete = isinstance(env.action_space, gym.spaces.Discrete)
 
@@ -97,17 +95,17 @@ def train_PG(exp_name='',
 
     #========================================================================================#
     # Notes on notation:
-    # 
+    #
     # Symbolic variables have the prefix sy_, to distinguish them from the numerical values
     # that are computed later in the function
-    # 
+    #
     # Prefixes and suffixes:
-    # ob - observation 
+    # ob - observation
     # ac - action
     # _no - this tensor should have shape (batch size /n/, observation dim)
     # _na - this tensor should have shape (batch size /n/, action dim)
     # _n  - this tensor should have shape (batch size /n/)
-    # 
+    #
     # Note: batch size /n/ is defined at runtime, and until then, the shape for that axis
     # is None
     #========================================================================================#
@@ -119,15 +117,15 @@ def train_PG(exp_name='',
     #========================================================================================#
     #                           ----------SECTION 4----------
     # Placeholders
-    # 
+    #
     # Need these for batch observations / actions / advantages in policy gradient loss function.
     #========================================================================================#
 
     sy_ob_no = tf.placeholder(shape=[None, ob_dim], name="ob", dtype=tf.float32)
     if discrete:
-        sy_ac_na = tf.placeholder(shape=[None], name="ac", dtype=tf.int32) 
+        sy_ac_na = tf.placeholder(shape=[None], name="ac", dtype=tf.int32)
     else:
-        sy_ac_na = tf.placeholder(shape=[None, ac_dim], name="ac", dtype=tf.float32) 
+        sy_ac_na = tf.placeholder(shape=[None, ac_dim], name="ac", dtype=tf.float32)
 
     # Define a placeholder for advantages
     sy_adv_n = TODO
@@ -136,7 +134,7 @@ def train_PG(exp_name='',
     #========================================================================================#
     #                           ----------SECTION 4----------
     # Networks
-    # 
+    #
     # Make symbolic operations for
     #   1. Policy network outputs which describe the policy distribution.
     #       a. For the discrete case, just logits for each action.
@@ -164,12 +162,12 @@ def train_PG(exp_name='',
     #
     #      Note: these ops should be functions of the policy network output ops.
     #
-    #   3. Computing the log probability of a set of actions that were actually taken, 
+    #   3. Computing the log probability of a set of actions that were actually taken,
     #      according to the policy.
     #
     #      Note: these ops should be functions of the placeholder 'sy_ac_na', and the 
     #      policy network output ops.
-    #   
+    #
     #========================================================================================#
 
     if discrete:
@@ -218,11 +216,13 @@ def train_PG(exp_name='',
     # Tensorflow Engineering: Config, Session, Variable initialization
     #========================================================================================#
 
-    tf_config = tf.ConfigProto(inter_op_parallelism_threads=1, intra_op_parallelism_threads=1) 
+    tf_config = tf.ConfigProto(
+        inter_op_parallelism_threads=1,
+        intra_op_parallelism_threads=1)
 
     sess = tf.Session(config=tf_config)
-    sess.__enter__() # equivalent to `with sess:`
-    tf.global_variables_initializer().run() #pylint: disable=E1101
+    sess.__enter__()                        # equivalent to `with sess:`
+    tf.global_variables_initializer().run()  # pylint: disable=E1101
 
 
 
@@ -241,7 +241,8 @@ def train_PG(exp_name='',
         while True:
             ob = env.reset()
             obs, acs, rewards = [], [], []
-            animate_this_episode=(len(paths)==0 and (itr % 10 == 0) and animate)
+            animate_this_episode = (
+                len(paths) == 0 and (itr % 10 == 0) and animate)
             steps = 0
             while True:
                 if animate_this_episode:
@@ -256,9 +257,11 @@ def train_PG(exp_name='',
                 steps += 1
                 if done or steps > max_path_length:
                     break
-            path = {"observation" : np.array(obs), 
-                    "reward" : np.array(rewards), 
-                    "action" : np.array(acs)}
+            path = {
+                "observation": np.array(obs),
+                "reward": np.array(rewards),
+                "action": np.array(acs)
+            }
             paths.append(path)
             timesteps_this_batch += pathlength(path)
             if timesteps_this_batch > min_timesteps_per_batch:
@@ -285,16 +288,16 @@ def train_PG(exp_name='',
         #
         #       tau=(s_0, a_0, ...) is a trajectory,
         #       Q_t is the Q-value at time t, Q^{pi}(s_t, a_t),
-        #       and b_t is a baseline which may depend on s_t. 
+        #       and b_t is a baseline which may depend on s_t.
         #
         # You will write code for two cases, controlled by the flag 'reward_to_go':
         #
-        #   Case 1: trajectory-based PG 
+        #   Case 1: trajectory-based PG
         #
         #       (reward_to_go = False)
         #
         #       Instead of Q^{pi}(s_t, a_t), we use the total discounted reward summed over 
-        #       entire trajectory (regardless of which time step the Q-value should be for). 
+        #       entire trajectory (regardless of which time step the Q-value should be for).
         #
         #       For this case, the policy gradient estimator is
         #
@@ -319,7 +322,7 @@ def train_PG(exp_name='',
         #
         #
         # Store the Q-values for all timesteps and all trajectories in a variable 'q_n',
-        # like the 'ob_no' and 'ac_na' above. 
+        # like the 'ob_no' and 'ac_na' above.
         #
         #====================================================================================#
 
@@ -437,7 +440,7 @@ def main():
 
     for e in range(args.n_experiments):
         seed = args.seed + 10*e
-        print('Running experiment with seed %d'%seed)
+        print('Running experiment with seed %d'% seed)
         def train_func():
             train_PG(
                 exp_name=args.exp_name,
@@ -461,7 +464,7 @@ def main():
         p = Process(target=train_func, args=tuple())
         p.start()
         p.join()
-        
+
 
 if __name__ == "__main__":
     main()
