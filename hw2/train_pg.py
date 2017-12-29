@@ -8,11 +8,10 @@ import time
 import inspect
 from multiprocessing import Process
 
-#============================================================================================#
+
+##################################################
 # Utilities
-#============================================================================================#
-
-
+##################################################
 def build_mlp(
         input_placeholder,
         output_size,
@@ -20,27 +19,33 @@ def build_mlp(
         n_layers=2,
         size=64,
         activation=tf.tanh,
-        output_activation=None
+        output_activation=None  # None means linear activation
         ):
-    #========================================================================================#
-    #                           ----------SECTION 3----------
+    ##################################################
+    # ----------SECTION 3----------
     # Network building
     #
-    # Your code should make a feedforward neural network (also called a multilayer perceptron)
-    # with 'n_layers' hidden layers of size 'size' units. 
-    # 
-    # The output layer should have size 'output_size' and activation 'output_activation'.
+    # Your code should make a feedforward neural network (also called a
+    # multilayer perceptron) with 'n_layers' hidden layers of size 'size'
+    # units.
+    #
+    # The output layer should have size 'output_size' and activation
+    # 'output_activation'.
     #
     # Hint: use tf.layers.dense
-    #========================================================================================#
+    ##################################################
 
     with tf.variable_scope(scope):
-        hidden_layer = input_placeholder
+        inputs = input_placeholder
         for _ in range(n_layers):
-            hidden_layer = tf.layers.dense(
-                hidden_layer, size, activation)
+            inputs = tf.layers.dense(
+                inputs=inputs,
+                units=size,
+                activation=activation)
         output_layer = tf.layers.dense(
-            hidden_layer, output_size, output_activation)
+            inputs=inputs,
+            units=output_size,
+            activation=output_activation)
     return output_layer
 
 
