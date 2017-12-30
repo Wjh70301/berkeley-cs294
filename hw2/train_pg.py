@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import gym
+import gym, roboschool
 import logz
 import os
 import time
@@ -206,19 +206,34 @@ def train_PG(exp_name='',
             labels=sy_ac_na, logits=sy_logits_na
         )
     else:
-        sy_mean = tf.reduce_mean(sy_output_layer, axis=1)
+        sy_mean = sy_output_layer
         # logstd should just be a trainable variable, not a network output.
-        sy_logstd = tf.Variable(shape=ac_dim)
+        sy_logstd = tf.Variable(tf.zeros([1, ac_dim]))
         sy_std = tf.exp(sy_logstd)
 
         sy_sampled_ac = tf.random_normal(
             # note off-diagonal elements are 0, meaning no correlation among
             # different dimensions in the gaussian
-            shape=[1], mean=sy_mean, stddev=sy_std)
+            shape=tf.shape(sy_mean), mean=sy_mean, stddev=sy_std)
+
         # Hint: Use the log probability under a multivariate gaussian.
         mvn = tf.contrib.distributions.MultivariateNormalDiag(
-            sy_mean, sy_logstd)
-        sy_logprob_n = tf.log(mvn.pdf(sy_mean))
+            sy_mean, sy_std)
+        sy_logprob_n = tf.log(mvn.prob(sy_mean))
+
+        # code equivalent the implementation at https://github.com/EbTech/CS294/blob/58766d6d22d997c9c97e860b38ab95faf376162c/hw2/train_pg.py#L196
+        # sy_mean = build_mlp(sy_ob_no, ac_dim, "policy", n_layers=n_layers, size=size)
+        # sy_logstd = tf.Variable(tf.zeros([1, ac_dim]), name="policy/logstd", dtype=tf.float32)
+        # sy_std = tf.exp(sy_logstd)
+
+        # # Sample an action from the stochastic policy
+        # sy_sampled_z = tf.random_normal(tf.shape(sy_mean))
+        # sy_sampled_ac = sy_mean + sy_std * sy_sampled_z
+
+        # # Likelihood of chosen action
+        # sy_z = (sy_ac_na - sy_mean) / sy_std
+        # sy_logprob_n = -0.5 * tf.reduce_sum(tf.square(sy_z), axis=1)
+
 
     ##################################################
     # ----------SECTION 4----------
@@ -504,4 +519,3 @@ def main():
 
 if __name__ == "__main__":
     main()
->
