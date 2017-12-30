@@ -2,7 +2,6 @@ import numpy as np
 import tensorflow as tf
 import gym
 import logz
-import scipy.signal
 import os
 import time
 import inspect
@@ -203,7 +202,9 @@ def train_PG(exp_name='',
         # action for each observation
         # [:, 0]: to be compatible with later usage of sy_sampled_ac
         sy_sampled_ac = tf.multinomial(sy_logits_na, 1)[:, 0]
-        # sy_logprob_n = tf.log(tf.nn.softmax(sy_logits_na)[:, sy_sampled_ac])
+        sy_logprob_n = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            labels=sy_ac_na, logits=sy_logits_na
+        )
     else:
         # YOUR_CODE_HERE
         sy_mean = tf.reduce_mean(logits, axis=1)
@@ -221,12 +222,9 @@ def train_PG(exp_name='',
     ##################################################
 
     # construct a pseudo-loss such that the gradient of its corresponding
-    # computation graph is the policy gradient
-    negative_likelihoods = tf.nn.softmax_cross_entropy_with_logits(
-        labels=sy_ac_na, logits=sy_output_layer)
-    weighted_negative_likelihoods = tf.multiply(
-        negative_likelihoods, sy_adv_n)
-    loss = tf.reduce_mean(weighted_negative_likelihoods)
+    # computation graph is the policy gradient, within tf.reduce_mean is the
+    # weighted negative likelihoods
+    loss = tf.reduce_mean(tf.multiply(sy_logprob_n, sy_adv_n))
     update_op = tf.train.AdamOptimizer(learning_rate).minimize(loss)
 
     ##################################################
@@ -236,8 +234,8 @@ def train_PG(exp_name='',
 
     if nn_baseline:
         baseline_prediction = tf.squeeze(build_mlp(
-                                sy_ob_no, 
-                                1, 
+                                sy_ob_no,
+                                1,
                                 "nn_baseline",
                                 n_layers=n_layers,
                                 size=size))
@@ -252,7 +250,8 @@ def train_PG(exp_name='',
 
     tf_config = tf.ConfigProto(
         inter_op_parallelism_threads=1,
-        intra_op_parallelism_threads=1)
+        intra_op_parallelism_threads=1
+    )
 
     sess = tf.Session(config=tf_config)
     sess.__enter__()                        # equivalent to `with sess:`
@@ -280,6 +279,9 @@ def train_PG(exp_name='',
                     env.render()
                     time.sleep(0.05)
                 obs.append(ob)
+                # ob[None] is equivalent to ob.reshape(1, -1) in this case,
+                # i.e. turning ob into a sequence of observations with a length
+                # of 1 so that can be fed to the nn
                 ac = sess.run(sy_sampled_ac, feed_dict={sy_ob_no: ob[None]})
                 ac = ac[0]
                 acs.append(ac)
@@ -397,9 +399,9 @@ def train_PG(exp_name='',
         ##################################################
 
         if normalize_advantages:
-            # On the next line, implement a trick which is known empirically to reduce variance
-            # in policy gradient methods: normalize adv_n to have mean zero and std=1. 
-            # YOUR_CODE_HERE
+            # On the next line, implement a trick which is known empirically to
+            # reduce variance in policy gradient methods: normalize adv_n to
+            # have mean zero and std=1. YOUR_CODE_HERE
             pass
 
 
@@ -422,18 +424,26 @@ def train_PG(exp_name='',
             pass
 
         ##################################################
-        #                           ----------SECTION 4----------
+        # ----------SECTION 4----------
         # Performing the Policy Update
         ##################################################
 
-        # Call the update operation necessary to perform the policy gradient update based on 
-        # the current batch of rollouts.
-        # 
-        # For debug purposes, you may wish to save the value of the loss function before
-        # and after an update, and then log them below. 
+        # Call the update operation necessary to perform the policy gradient
+        # update based on the current batch of rollouts.
+        #
+        # For debug purposes, you may wish to save the value of the loss
+        # function before and after an update, and then log them below.
 
         # YOUR_CODE_HERE
-
+        feed_dict = {
+            sy_ob_no: ob_no,
+            sy_ac_na: ac_na,
+            sy_adv_n: q_n
+        }
+        logz.log_tabular("loss before update", loss.eval(feed_dict=feed_dict))
+        for i in range(100):
+            sess.run(update_op, feed_dict=feed_dict)
+        logz.log_tabular("loss after update", loss.eval(feed_dict=feed_dict))
 
         # Log diagnostics
         returns = [path["reward"].sum() for path in paths]
