@@ -206,15 +206,19 @@ def train_PG(exp_name='',
             labels=sy_ac_na, logits=sy_logits_na
         )
     else:
-        # YOUR_CODE_HERE
-        sy_mean = tf.reduce_mean(logits, axis=1)
+        sy_mean = tf.reduce_mean(sy_output_layer, axis=1)
         # logstd should just be a trainable variable, not a network output.
         sy_logstd = tf.Variable(shape=ac_dim)
+        sy_std = tf.exp(sy_logstd)
+
         sy_sampled_ac = tf.random_normal(
-            min_timesteps_per_batch, sy_mean, sy_logstd)
-        # Hint: Use the log probability under a multivariate gaussian. 
-        sy_logprob_n = tf.contrib.distributions.Normal(
-            sy_mean, sy_logstd).cdf(sy_sampled_ac)
+            # note off-diagonal elements are 0, meaning no correlation among
+            # different dimensions in the gaussian
+            shape=[1], mean=sy_mean, stddev=sy_std)
+        # Hint: Use the log probability under a multivariate gaussian.
+        mvn = tf.contrib.distributions.MultivariateNormalDiag(
+            sy_mean, sy_logstd)
+        sy_logprob_n = tf.log(mvn.pdf(sy_mean))
 
     ##################################################
     # ----------SECTION 4----------
@@ -500,3 +504,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+>
