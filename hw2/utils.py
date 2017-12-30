@@ -1,6 +1,7 @@
 import os
 import time
 import argparse
+import functools
 
 
 def get_args():
@@ -40,3 +41,17 @@ def setup_logdir(exp_name, env_name):
     if not(os.path.exists(logdir)):
         os.makedirs(logdir)
     return logdir
+
+
+# https://danijar.com/structuring-your-tensorflow-models/
+def lazy_property(function):
+    attribute = '_cache_' + function.__name__
+
+    @property
+    @functools.wraps(function)
+    def decorator(self):
+        if not hasattr(self, attribute):
+            setattr(self, attribute, function(self))
+            return getattr(self, attribute)
+
+    return decorator
