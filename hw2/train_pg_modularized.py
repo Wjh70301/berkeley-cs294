@@ -101,7 +101,8 @@ class PGAgent(object):
     def sy_sampled_action(self):
         return tf.multinomial(self.sy_logits, 1)[:, 0]
 
-    def sample_trajectory(self, session, max_traj_len=None):
+    def sample_trajectory(self, session, gamma, reward_to_go,
+                          max_traj_len=None):
         if max_traj_len is None:
             max_traj_len = self.env.spec.max_episode_steps
 
@@ -126,7 +127,8 @@ class PGAgent(object):
             if done or steps >= max_traj_len:
                 break
 
-        adv = self.compute_advantage(rewards)
+        adv = self.compute_advantage(rewards, gamma, reward_to_go)
+
         traj = {
             'observation': np.array(obs),
             'reward': np.array(rewards),
@@ -136,22 +138,25 @@ class PGAgent(object):
         }
         return traj
 
-    def compute_advantage(self, traj_reward, gamma=0.99, reward_to_go=False):
+    def compute_advantage(self, traj_rewards, gamma, reward_to_go):
         """compute q for a single trajectory"""
         disc_rew = []
-        for k, rew in enumerate(traj_reward):
+        for k, rew in enumerate(traj_rewards):
             disc_rew.append(gamma ** k * rew)
 
-        num_steps = len(traj_reward)
+        num_steps = len(traj_rewards)
         if not reward_to_go:
             return np.repeat(np.sum(disc_rew), num_steps)
         else:
             return np.cumsum(disc_rew[::-1])[::-1]
 
     def sample_trajectories(
-            self, session, batch_size=None, num_trajectories=None):
-        """You could sample time step according to total time steps (i.e. batch_size)
-        or number of trajectories. batch_size takes precedence"""
+            self, session, gamma=1, reward_to_go=False,
+            batch_size=None, num_trajectories=None):
+        """
+        You could sample time step according to total time steps (i.e.
+        batch_size) or number of trajectories. batch_size takes precedence
+        """
         if batch_size is None and num_trajectories is None:
             raise ValueError(
                 "must specify one of `batch_size` and `num_trajectories`")
@@ -161,13 +166,13 @@ class PGAgent(object):
         if batch_size is not None:
             size = 0
             while size < batch_size:
-                j = self.sample_trajectory(session=sess)
+                j = self.sample_trajectory(sess, gamma, reward_to_go)
                 size += j['len']
                 trajs.append(j)
 
         if num_trajectories is not None:
             for itr in range(num_trajectories):
-                j = self.sample_trajectory(session=sess)
+                j = self.sample_trajectory(sess, gamma, reward_to_go)
                 trajs.append(j)
 
         return trajs
@@ -181,9 +186,10 @@ class PGAgent(object):
 
 
 if __name__ == "__main__":
-    env_name = 'CartPole-v0'
-    env = gym.make(env_name)
+    args = U.get_args()
+    # logdir = U.setup_logdir(args.exp_name, args.env_name)
 
+    env = gym.make(args.env_name)
     agent = PGAgent(env)
 
     tf_config = tf.ConfigProto(
@@ -194,10 +200,19 @@ if __name__ == "__main__":
     with tf.Session(config=tf_config) as sess:
         tf.global_variables_initializer().run()
 
-        n_iter = 100
-        for itr in range(n_iter):
+        for itr in range(args.n_iter):
+            trajs = agent.sample_trajectories(
+                sess,
+                # i.e. total number of timesteps in a batch
+                # from multiple trajectories
+                gamma=args.discount,
+                reward_to_go=args.reward_to_go,
+                batch_size=args.batch_size,
+            )
+
+            # could also specify number of trajectories to sample instead
             # trajs = agent.sample_trajectories(sess, num_trajectories=10)
-            trajs = agent.sample_trajectories(sess, batch_size=1000)
+
             [obs, act, adv] = agent.concat_trajectories(trajs)
 
             feed_dict = {
@@ -216,6 +231,7 @@ if __name__ == "__main__":
                 [
                     '#{0}'.format(itr + 1),
                     '{0}-timesteps'.format(len(obs)),
+                    '{0}-trajs'.format(len(trajs)),
                     '{0:.8f}'.format(np.mean(returns)),
                     '{0:.8f}'.format(np.max(returns)),
                     '{0:.8f} => {1:.8f}'.format(before, after),
