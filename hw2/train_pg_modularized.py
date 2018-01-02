@@ -13,6 +13,11 @@ import utils as U
 from utils import lazy_property
 
 
+import logging
+logging.basicConfig(
+    level=logging.INFO, format='%(asctime)s|%(levelname)s|%(message)s')
+
+
 class PGAgent(object):
     # code structre inspired by
     # https://danijar.com/structuring-your-tensorflow-models/
@@ -49,12 +54,14 @@ class PGAgent(object):
 
     def _build_cg(self):
         # build computational graph
-        self.logits
-        # self.sampled_action
-        # self.logprob
+        self.sy_logits
+        # self.sy_sampled_action
+        # self.sy_logprob
+        self.update_policy
+        pass
 
     @lazy_property
-    def logits(self):
+    def sy_logits(self):
         inputs = self.sy_obs
         output_layer_size = self.act_dim
 
@@ -77,53 +84,100 @@ class PGAgent(object):
             activation=output_activation)
 
     @lazy_property
-    def sampled_action(self):
-        return tf.multinomial(self.logits, 1)[:, 0]
-
-    @lazy_property
-    def logprob(self):
+    def sy_logprob(self):
         return tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=self.sy_act, logits=self.logits
+            labels=self.sy_act, logits=self.sy_logits
         )
 
-    def sample_trajectory(self, session, max_trajectory_length=1000):
+    @lazy_property
+    def loss(self):
+        return tf.reduce_mean(tf.multiply(self.sy_logprob, self.sy_adv))
+
+    @lazy_property
+    def update_policy(self, learning_rate=5e-3):
+        return tf.train.AdamOptimizer(learning_rate).minimize(self.loss)
+
+    @lazy_property
+    def sy_sampled_action(self):
+        return tf.multinomial(self.sy_logits, 1)[:, 0]
+
+    def sample_trajectory(self, session, max_traj_len=None):
+        if max_traj_len is None:
+            max_traj_len = self.env.spec.max_episode_steps
+
         ob = self.env.reset()
-        obs, acs, rewards = [], [], []
+        obs, actions, rewards = [], [], []
         steps = 0
 
         while True:
             obs.append(ob)
+
             # ob[None] is equivalent to ob.reshape(1, -1) in this case,
             # i.e. turning ob into a sequence of observations with a length
             # of 1 so that can be fed to the nn
-            ac = session.run(
-                self.sampled_action,
-                feed_dict={
-                    self.sy_obs: ob[None]
-                }
-            )
-            ac = ac[0]
-            acs.append(ac)
-            ob, rew, done, _ = self.env.step(ac)
+            ac = session.run(self.sy_sampled_action,
+                             feed_dict={self.sy_obs: ob[None]})
+
+            actions.append(ac[0])
+            ob, rew, done, _ = self.env.step(ac[0])
             rewards.append(rew)
             steps += 1
-            if done or steps > max_trajectory_length:
+
+            if done or steps >= max_traj_len:
                 break
 
+        adv = self.compute_advantage(rewards)
         traj = {
             'observation': np.array(obs),
             'reward': np.array(rewards),
-            'action': np.array(acs),
+            'action': np.array(actions),
+            'adv': np.array(adv),
             'len': len(obs)
         }
-
         return traj
 
-    def sample_trajectories(self, session, num_trajectories):
+    def compute_advantage(self, traj_reward, gamma=0.99, reward_to_go=False):
+        """compute q for a single trajectory"""
+        disc_rew = []
+        for k, rew in enumerate(traj_reward):
+            disc_rew.append(gamma ** k * rew)
+
+        num_steps = len(traj_reward)
+        if not reward_to_go:
+            return np.repeat(np.sum(disc_rew), num_steps)
+        else:
+            return np.cumsum(disc_rew[::-1])[::-1]
+
+    def sample_trajectories(
+            self, session, batch_size=None, num_trajectories=None):
+        """You could sample time step according to total time steps (i.e. batch_size)
+        or number of trajectories. batch_size takes precedence"""
+        if batch_size is None and num_trajectories is None:
+            raise ValueError(
+                "must specify one of `batch_size` and `num_trajectories`")
+
         trajs = []
-        for itr in range(num_trajectories):
-            trajs.append(self.sample_trajectory(session=sess))
+
+        if batch_size is not None:
+            size = 0
+            while size < batch_size:
+                j = self.sample_trajectory(session=sess)
+                size += j['len']
+                trajs.append(j)
+
+        if num_trajectories is not None:
+            for itr in range(num_trajectories):
+                j = self.sample_trajectory(session=sess)
+                trajs.append(j)
+
         return trajs
+
+    def concat_trajectories(self, trajectories):
+        trajs = trajectories
+        obs = np.concatenate([path["observation"] for path in trajs])
+        act = np.concatenate([path["action"] for path in trajs])
+        adv = np.concatenate([path["adv"] for path in trajs])
+        return [obs, act, adv]
 
 
 if __name__ == "__main__":
@@ -139,6 +193,32 @@ if __name__ == "__main__":
 
     with tf.Session(config=tf_config) as sess:
         tf.global_variables_initializer().run()
-        # sess.run(tf.initialize_all_variables())
 
-        trajs = agent.sample_trajectories(sess, num_trajectories=10)
+        n_iter = 100
+        for itr in range(n_iter):
+            # trajs = agent.sample_trajectories(sess, num_trajectories=10)
+            trajs = agent.sample_trajectories(sess, batch_size=1000)
+            [obs, act, adv] = agent.concat_trajectories(trajs)
+
+            feed_dict = {
+                agent.sy_obs: obs,
+                agent.sy_act: act,
+                agent.sy_adv: adv
+            }
+
+            before = agent.loss.eval(feed_dict=feed_dict)
+            sess.run(agent.update_policy, feed_dict)
+            after = agent.loss.eval(feed_dict=feed_dict)
+            # logging.info("loss change per update: {0} => {1}".format(before, after))
+
+            returns = [path["reward"].sum() for path in trajs]
+            logging.info('\t'.join(
+                [
+                    '#{0}'.format(itr + 1),
+                    '{0}-timesteps'.format(len(obs)),
+                    '{0:.8f}'.format(np.mean(returns)),
+                    '{0:.8f}'.format(np.max(returns)),
+                    '{0:.8f} => {1:.8f}'.format(before, after),
+
+                ]
+            ))
