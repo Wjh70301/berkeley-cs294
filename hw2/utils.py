@@ -52,6 +52,5 @@ def lazy_property(function):
     def decorator(self):
         if not hasattr(self, attribute):
             setattr(self, attribute, function(self))
-            return getattr(self, attribute)
-
+        return getattr(self, attribute)
     return decorator

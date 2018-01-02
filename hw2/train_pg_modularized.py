@@ -10,19 +10,7 @@ import inspect
 from multiprocessing import Process
 
 import utils as U
-
-
-# https://danijar.com/structuring-your-tensorflow-models/
-def lazy_property(function):
-    attribute = '_cache_' + function.__name__
-
-    @property
-    @functools.wraps(function)
-    def decorator(self):
-        if not hasattr(self, attribute):
-            setattr(self, attribute, function(self))
-        return getattr(self, attribute)
-    return decorator
+from utils import lazy_property
 
 
 class PGAgent(object):
