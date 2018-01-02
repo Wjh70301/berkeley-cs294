@@ -486,8 +486,14 @@ def train_PG(exp_name='',
             sy_adv_n: q_n
         }
         logz.log_tabular("loss before update", loss.eval(feed_dict=feed_dict))
-        for i in range(100):
-            sess.run(update_op, feed_dict=feed_dict)
+
+        # multiple updates per sampling is WRONG because the trajectories are
+        # sampled from the specific one policy before a single update. After
+        # one update, the trajectories do not correspond to the new policy any
+        # more.
+
+        # for i in range(100):
+        #     sess.run(update_op, feed_dict=feed_dict)
         logz.log_tabular("loss after update", loss.eval(feed_dict=feed_dict))
 
         # Log diagnostics
