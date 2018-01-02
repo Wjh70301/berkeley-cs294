@@ -1,4 +1,4 @@
-import gym
+import gym, roboschool
 import tensorflow as tf
 
 from train_pg import build_mlp
@@ -9,6 +9,13 @@ def test_gym_CartPole_v0():
     assert isinstance(env.action_space, gym.spaces.Discrete)
     assert env.action_space.n == 2
     assert env.observation_space.shape == (4,)
+
+
+def test_RoboschoolInvertedPendulum_v1():
+    env = gym.make("RoboschoolInvertedPendulum-v1")
+    assert not isinstance(env.action_space, gym.spaces.Discrete)
+    assert env.action_space.shape == (1,)
+    assert env.observation_space.shape == (5,)
 
 
 def test_build_mlp():
