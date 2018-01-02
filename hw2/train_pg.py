@@ -383,14 +383,40 @@ def train_PG(exp_name='',
 
         # YOUR_CODE_HERE
         q_n = []
-        for path in paths:
-            path_len = path['reward'].shape[0]
-            gammas = np.repeat(gamma, path_len)
-            powers = np.arange(path_len)
-            discounts = gammas ** powers
-            discounted_rewards = discounts * path['reward']
-            discounted_rewards_sum = np.cumsum(discounted_rewards)
-            q_n.append(discounted_rewards_sum)
+        if reward_to_go == False:
+            for path in paths:
+                q_t = []
+                for k in range(len(path['reward'])):
+                    T = k + 1
+                    ret = []
+                    for t in range(T):
+                        _r = 0
+                        for t_prime in range(T):
+                            _r += gamma ** t_prime * path['reward'][t_prime]
+                        ret.append(_r)
+                    q_t.append(np.sum(ret))
+
+                q_n.append(q_t)
+                # vectorized version
+                # path_len = path['reward'].shape[0]
+                # gammas = np.repeat(gamma, path_len)
+                # powers = np.arange(path_len)
+                # discounts = gammas ** powers
+                # discounted_rewards = discounts * path['reward']
+                # discounted_rewards_sum = np.cumsum(discounted_rewards)
+        else:
+            for path in paths:
+                q_t = []
+                for k in range(len(path['reward'])):
+                    T = k + 1
+                    ret = []
+                    for t in range(T):
+                        _r = 0
+                        for t_prime in range(t, T):
+                            _r += gamma ** (t_prime - t) * path['reward'][t_prime]
+                        ret.append(_r)
+                    q_t.append(np.sum(ret))
+                q_n.append(q_t)
         q_n = np.concatenate(q_n)
 
         ##################################################
