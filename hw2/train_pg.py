@@ -425,13 +425,13 @@ def train_PG(exp_name='',
         ##################################################
 
         if nn_baseline:
-            # If nn_baseline is True, use your neural network to predict reward-to-go
-            # at each timestep for each trajectory, and save the result in a variable 'b_n'
-            # like 'ob_no', 'ac_na', and 'q_n'.
+            # If nn_baseline is True, use your neural network to predict
+            # reward-to-go at each timestep for each trajectory, and save the
+            # result in a variable 'b_n' like 'ob_no', 'ac_na', and 'q_n'.
             #
-            # Hint #bl1: rescale the output from the nn_baseline to match the statistics
-            # (mean and std) of the current or previous batch of Q-values. (Goes with Hint
-            # #bl2 below.)
+            # Hint #bl1: rescale the output from the nn_baseline to match the
+            # statistics (mean and std) of the current or previous batch of
+            # Q-values. (Goes with Hint #bl2 below.)
 
             b_n = TODO
             adv_n = q_n - b_n
