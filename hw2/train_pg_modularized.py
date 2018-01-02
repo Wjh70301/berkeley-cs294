@@ -21,8 +21,9 @@ logging.basicConfig(
 class PGAgent(object):
     # code structre inspired by
     # https://danijar.com/structuring-your-tensorflow-models/
-    def __init__(self, env):
+    def __init__(self, env, tf_session):
         self.env = env          # an openai environment
+        self.tf_session = tf_session
 
         self.env_is_discrete = isinstance(
             env.action_space, gym.spaces.Discrete)
@@ -101,7 +102,7 @@ class PGAgent(object):
     def sy_sampled_action(self):
         return tf.multinomial(self.sy_logits, 1)[:, 0]
 
-    def sample_trajectory(self, session, gamma, reward_to_go,
+    def sample_trajectory(self, gamma, reward_to_go,
                           max_traj_len=None):
         if max_traj_len is None:
             max_traj_len = self.env.spec.max_episode_steps
@@ -116,8 +117,8 @@ class PGAgent(object):
             # ob[None] is equivalent to ob.reshape(1, -1) in this case,
             # i.e. turning ob into a sequence of observations with a length
             # of 1 so that can be fed to the nn
-            ac = session.run(self.sy_sampled_action,
-                             feed_dict={self.sy_obs: ob[None]})
+            ac = self.tf_session.run(
+                self.sy_sampled_action, feed_dict={self.sy_obs: ob[None]})
 
             actions.append(ac[0])
             ob, rew, done, _ = self.env.step(ac[0])
@@ -150,9 +151,8 @@ class PGAgent(object):
         else:
             return np.cumsum(disc_rew[::-1])[::-1]
 
-    def sample_trajectories(
-            self, session, gamma=1, reward_to_go=False,
-            batch_size=None, num_trajectories=None):
+    def sample_trajectories(self, gamma=1, reward_to_go=False,
+                            batch_size=None, num_trajectories=None):
         """
         You could sample time step according to total time steps (i.e.
         batch_size) or number of trajectories. batch_size takes precedence
@@ -166,13 +166,13 @@ class PGAgent(object):
         if batch_size is not None:
             size = 0
             while size < batch_size:
-                j = self.sample_trajectory(sess, gamma, reward_to_go)
+                j = self.sample_trajectory(gamma, reward_to_go)
                 size += j['len']
                 trajs.append(j)
 
         if num_trajectories is not None:
             for itr in range(num_trajectories):
-                j = self.sample_trajectory(sess, gamma, reward_to_go)
+                j = self.sample_trajectory(gamma, reward_to_go)
                 trajs.append(j)
 
         return trajs
@@ -190,7 +190,6 @@ if __name__ == "__main__":
     # logdir = U.setup_logdir(args.exp_name, args.env_name)
 
     env = gym.make(args.env_name)
-    agent = PGAgent(env)
 
     tf_config = tf.ConfigProto(
         inter_op_parallelism_threads=1,
@@ -198,11 +197,13 @@ if __name__ == "__main__":
     )
 
     with tf.Session(config=tf_config) as sess:
+        agent = PGAgent(env, sess)
+
+        # initializer has to be after agent creation
         tf.global_variables_initializer().run()
 
         for itr in range(args.n_iter):
             trajs = agent.sample_trajectories(
-                sess,
                 # i.e. total number of timesteps in a batch
                 # from multiple trajectories
                 gamma=args.discount,
