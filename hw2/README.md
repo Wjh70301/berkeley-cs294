@@ -24,3 +24,9 @@ done
 * `sb`: small batch
 * `rtg`: rewart-to-go
 * `na`: normalize_advantages
+
+
+## Caveat
+
+* My implementation for continuous action is not 100% sure correct, although it learns
+* My implementation of neural network baseline may still be incorrect
