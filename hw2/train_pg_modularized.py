@@ -58,28 +58,37 @@ class PGAgent(object):
         self.update_policy
         pass
 
+    def build_mlp(
+            input_placeholder,
+            output_size,
+            scope,
+            n_layers=2,
+            size=64,
+            activation=tf.tanh,
+            output_activation=None  # None means linear activation
+            ):
+
+        with tf.variable_scope(scope):
+            inputs = input_placeholder
+            for _ in range(n_layers):
+                inputs = tf.layers.dense(
+                    inputs=inputs,
+                    units=size,
+                    activation=activation)
+            output_layer = tf.layers.dense(
+                inputs=inputs,
+                units=output_size,
+                activation=output_activation)
+        return output_layer
+
     @lazy_property
     def sy_logits(self):
-        inputs = self.sy_obs
-        output_layer_size = self.act_dim
+        return self.build_mlp(self.sy_obs, self.act_dim, scope='logits')
 
-        num_layers = 2
-        hidden_layer_size = 64
-        activation = tf.tanh
-        output_activation = None  # None means linear activation
-
-        # build hidden layer
-        for _ in range(num_layers):
-            inputs = tf.layers.dense(
-                inputs=inputs,
-                units=hidden_layer_size,
-                activation=activation)
-
-        # build output layer
-        return tf.layers.dense(
-            inputs=inputs,
-            units=output_layer_size,
-            activation=output_activation)
+    @lazy_property
+    def sy_nn_baseline(self):
+        return tf.squeeze(self.build_mlp(
+            self.sy_obs, 1, scope="nn_baseline"))
 
     @lazy_property
     def sy_logprob(self):
