@@ -56,9 +56,11 @@ class PGAgent(object):
         # self.sy_sampled_action
         # self.sy_logprob
         self.update_policy
+        self.update_nn_bn
         pass
 
     def build_mlp(
+            self,
             input_placeholder,
             output_size,
             scope,
@@ -91,6 +93,15 @@ class PGAgent(object):
             self.sy_obs, 1, scope="nn_baseline"))
 
     @lazy_property
+    def sy_nn_bn(self):
+        return tf.placeholder(shape=[None], name='nn_bn', dtype=tf.float32)
+
+    @lazy_property
+    def update_nn_bn(self, learning_rate=5e-3):
+        bn_loss = tf.losses.mean_squared_error(self.sy_nn_bn, self.sy_nn_baseline)
+        return tf.train.AdamOptimizer(learning_rate).minimize(bn_loss)
+
+    @lazy_property
     def sy_logprob(self):
         return tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=self.sy_act, logits=self.sy_logits
@@ -113,6 +124,7 @@ class PGAgent(object):
 
     def sample_trajectory(
             self, gamma, reward_to_go, normalize_advantages,
+            nn_baseline,
             max_traj_len=None):
         if max_traj_len is None:
             max_traj_len = self.env.spec.max_episode_steps
@@ -138,15 +150,29 @@ class PGAgent(object):
             if done or steps >= max_traj_len:
                 break
 
-        adv = self.compute_advantage(rewards, gamma, reward_to_go)
+        q_n = self.compute_advantage(rewards, gamma, reward_to_go)
+
+        if nn_baseline:
+            bn = self.tf_session.run(
+                self.sy_nn_baseline, feed_dict={self.sy_obs: ob[None]})
+            adv_n = q_n - bn
+        else:
+            adv_n = q_n.copy()
+
         if normalize_advantages:
-            adv = self.normalize(adv)
+            adv_n = self.normalize(adv_n)
+
+        if nn_baseline:
+            self.tf_session.run(self.update_nn_bn, feed_dict={
+                self.sy_obs: ob[None],
+                self.sy_nn_bn: self.normalize(q_n)
+            })
 
         traj = {
             'observation': np.array(obs),
             'reward': np.array(rewards),
             'action': np.array(actions),
-            'adv': np.array(adv),
+            'adv': np.array(adv_n),
             'len': len(obs)
         }
         return traj
@@ -165,6 +191,7 @@ class PGAgent(object):
 
     def sample_trajectories(
             self, gamma=1, reward_to_go=False, normalize_advantages=False,
+            nn_baseline=False,
             batch_size=None, num_trajectories=None):
         """
         You could sample time step according to total time steps (i.e.
@@ -182,7 +209,8 @@ class PGAgent(object):
                 j = self.sample_trajectory(
                     gamma,
                     reward_to_go,
-                    normalize_advantages
+                    normalize_advantages,
+                    nn_baseline,
                 )
                 size += j['len']
                 trajs.append(j)
@@ -193,7 +221,8 @@ class PGAgent(object):
                 j = self.sample_trajectory(
                     gamma,
                     reward_to_go,
-                    normalize_advantages
+                    normalize_advantages,
+                    nn_baseline,
                 )
                 trajs.append(j)
 
@@ -244,6 +273,7 @@ if __name__ == "__main__":
                 gamma=args.discount,
                 reward_to_go=args.reward_to_go,
                 normalize_advantages=args.normalize_advantages,
+                nn_baseline=args.nn_baseline,
 
                 # batch_size is the total number of timesteps in a batch from
                 # multiple trajectories
