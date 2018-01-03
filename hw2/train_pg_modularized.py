@@ -1,17 +1,14 @@
+import os
 import functools
 
 import numpy as np
+import pandas as pd
+
 import tensorflow as tf
 import gym
-import logz
-import os
-import time
-import inspect
-from multiprocessing import Process
 
 import utils as U
 from utils import lazy_property
-
 
 import logging
 logging.basicConfig(
@@ -179,15 +176,19 @@ class PGAgent(object):
 
     def concat_trajectories(self, trajectories):
         trajs = trajectories
-        obs = np.concatenate([path["observation"] for path in trajs])
-        act = np.concatenate([path["action"] for path in trajs])
-        adv = np.concatenate([path["adv"] for path in trajs])
+        obs = np.concatenate([j["observation"] for j in trajs])
+        act = np.concatenate([j["action"] for j in trajs])
+        adv = np.concatenate([j["adv"] for j in trajs])
         return [obs, act, adv]
 
 
 if __name__ == "__main__":
     args = U.get_args()
-    # logdir = U.setup_logdir(args.exp_name, args.env_name)
+    output_dir = os.path.join(
+        'data', args.exp_name, args.env_name)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    output_csv = os.path.join(output_dir, '{0}.csv'.format(args.experiment_id))
 
     env = gym.make(args.env_name)
 
@@ -202,6 +203,13 @@ if __name__ == "__main__":
         # initializer has to be after agent creation
         tf.global_variables_initializer().run()
 
+        progress = []
+        col_names = [
+            'iter', 'num_timesteps', 'num_trajs',
+            'avg_ret', 'max_ret', 'min_ret',
+            'before_update', 'after_update'
+        ]
+        logging.info('\t'.join(col_names))
         for itr in range(args.n_iter):
             trajs = agent.sample_trajectories(
                 # i.e. total number of timesteps in a batch
@@ -227,15 +235,29 @@ if __name__ == "__main__":
             after = agent.loss.eval(feed_dict=feed_dict)
             # logging.info("loss change per update: {0} => {1}".format(before, after))
 
-            returns = [path["reward"].sum() for path in trajs]
-            logging.info('\t'.join(
-                [
-                    '#{0}'.format(itr + 1),
-                    '{0}-timesteps'.format(len(obs)),
-                    '{0}-trajs'.format(len(trajs)),
-                    '{0:.8f}'.format(np.mean(returns)),
-                    '{0:.8f}'.format(np.max(returns)),
-                    '{0:.8f} => {1:.8f}'.format(before, after),
+            returns = [j["reward"].sum() for j in trajs]
 
-                ]
-            ))
+            step_prog = [
+                itr + 1,
+                len(obs),
+                len(trajs),
+                np.mean(returns),
+                np.max(returns),
+                np.min(returns),
+                before,
+                after
+            ]
+
+            logging.info(
+                    '#{0}\t'
+                    '{1}-timesteps\t'
+                    '{2}-trajs\t'
+                    '{3:.8f}\t'
+                    '{4:.8f}\t'
+                    '{5:.8f}\t'
+                    '{6:.8f} => {7:.8f}'.format(*step_prog)
+            )
+            progress.append(step_prog)
+
+        out_df = pd.DataFrame(progress, columns=col_names)
+        out_df.to_csv(output_csv, index=False)
