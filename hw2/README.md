@@ -1,3 +1,6 @@
+I almost rewrite `train_pg.py` completely as the original was no modularized
+enough. Here, I use [roboschool](https://github.com/openai/roboschool) instead of MuJoCo.
+
 # Commands with more informative arguments
 
 Slightly different API from
