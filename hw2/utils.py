@@ -15,14 +15,17 @@ def get_args():
     parser.add_argument('--batch_size', '-b', type=int, default=1000)
     parser.add_argument('--ep_len', '-ep', type=float, default=-1.)
     parser.add_argument('--learning_rate', '-lr', type=float, default=5e-3)
+
+    parser.add_argument('--normalize_advantages', '-na', action='store_true')
     parser.add_argument('--reward_to_go', '-rtg', action='store_true')
-    parser.add_argument('--dont_normalize_advantages', '-dna', action='store_true')
     parser.add_argument('--nn_baseline', '-bl', action='store_true')
+
     parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--n_experiments', '-e', type=int, default=1)
+
     parser.add_argument('--n_layers', '-l', type=int, default=1)
     parser.add_argument('--size', '-s', type=int, default=32)
 
+    parser.add_argument('--experiment_id', type=int, default=0)
     args = parser.parse_args()
     return args
 

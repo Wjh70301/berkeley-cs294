@@ -99,8 +99,12 @@ class PGAgent(object):
     def sy_sampled_action(self):
         return tf.multinomial(self.sy_logits, 1)[:, 0]
 
-    def sample_trajectory(self, gamma, reward_to_go,
-                          max_traj_len=None):
+    def normalize(self, data):
+        return (data - np.mean(data)) / np.std(data)
+
+    def sample_trajectory(
+            self, gamma, reward_to_go, normalize_advantages,
+            max_traj_len=None):
         if max_traj_len is None:
             max_traj_len = self.env.spec.max_episode_steps
 
@@ -126,6 +130,8 @@ class PGAgent(object):
                 break
 
         adv = self.compute_advantage(rewards, gamma, reward_to_go)
+        if normalize_advantages:
+            adv = self.normalize(adv)
 
         traj = {
             'observation': np.array(obs),
@@ -148,8 +154,9 @@ class PGAgent(object):
         else:
             return np.cumsum(disc_rew[::-1])[::-1]
 
-    def sample_trajectories(self, gamma=1, reward_to_go=False,
-                            batch_size=None, num_trajectories=None):
+    def sample_trajectories(
+            self, gamma=1, reward_to_go=False, normalize_advantages=False,
+            batch_size=None, num_trajectories=None):
         """
         You could sample time step according to total time steps (i.e.
         batch_size) or number of trajectories. batch_size takes precedence
@@ -159,17 +166,26 @@ class PGAgent(object):
                 "must specify one of `batch_size` and `num_trajectories`")
 
         trajs = []
-
+        # sample by total number of timesteps
         if batch_size is not None:
             size = 0
             while size < batch_size:
-                j = self.sample_trajectory(gamma, reward_to_go)
+                j = self.sample_trajectory(
+                    gamma,
+                    reward_to_go,
+                    normalize_advantages
+                )
                 size += j['len']
                 trajs.append(j)
 
+        # sample by number of trajectories
         if num_trajectories is not None:
             for itr in range(num_trajectories):
-                j = self.sample_trajectory(gamma, reward_to_go)
+                j = self.sample_trajectory(
+                    gamma,
+                    reward_to_go,
+                    normalize_advantages
+                )
                 trajs.append(j)
 
         return trajs
@@ -212,10 +228,12 @@ if __name__ == "__main__":
         logging.info('\t'.join(col_names))
         for itr in range(args.n_iter):
             trajs = agent.sample_trajectories(
-                # i.e. total number of timesteps in a batch
-                # from multiple trajectories
                 gamma=args.discount,
                 reward_to_go=args.reward_to_go,
+                normalize_advantages=args.normalize_advantages,
+
+                # batch_size is the total number of timesteps in a batch from
+                # multiple trajectories
                 batch_size=args.batch_size,
             )
 
