@@ -200,6 +200,10 @@ class PGAgent(object):
 
 if __name__ == "__main__":
     args = U.get_args()
+
+    tf.set_random_seed(args.seed)
+    np.random.seed(args.seed)
+
     output_dir = os.path.join(
         'data', args.exp_name, args.env_name)
     if not os.path.exists(output_dir):
