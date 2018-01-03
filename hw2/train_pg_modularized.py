@@ -6,6 +6,7 @@ import pandas as pd
 
 import tensorflow as tf
 import gym
+import roboschool
 
 import utils as U
 from utils import lazy_property
@@ -25,9 +26,6 @@ class PGAgent(object):
         self.env_is_discrete = isinstance(
             env.action_space, gym.spaces.Discrete)
 
-        # only consider discrete environment for now
-        assert self.env_is_discrete
-
         self.obs_dim = env.observation_space.shape[0]
 
         self._define_placeholders()
@@ -42,9 +40,14 @@ class PGAgent(object):
             shape=[None, obs_dim], name="ob", dtype=tf.float32)
 
         # action
-        self.act_dim = env.action_space.n
-        self.sy_act = tf.placeholder(
-            shape=[None], name="ac", dtype=tf.int32)
+        if self.env_is_discrete:
+            self.act_dim = env.action_space.n
+            self.sy_act = tf.placeholder(
+                shape=[None], name="ac", dtype=tf.int32)
+        else:
+            self.act_dim = env.action_space.shape[0]
+            self.sy_act = tf.placeholder(
+                shape=[None, self.act_dim], name="ac", dtype=tf.float32)
 
         # advantage (Q)
         self.sy_adv = tf.placeholder(
@@ -103,9 +106,21 @@ class PGAgent(object):
 
     @lazy_property
     def sy_logprob(self):
-        return tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=self.sy_act, logits=self.sy_logits
-        )
+        if self.env_is_discrete:
+            return tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=self.sy_act, logits=self.sy_logits
+            )
+        else:
+            sy_cont_action_mean = self.sy_logits
+            # may not have been using MultivariateNormalDia correctly, just
+            # left here for reference
+            # mvn = tf.contrib.distributions.MultivariateNormalDiag(
+            #     sy_cont_action_mean, self.sy_cont_action_std)
+            # return tf.log(mvn.prob(sy_cont_action_mean))
+
+            sy_z = (self.sy_act - sy_cont_action_mean) / self.sy_cont_action_std
+            # constant scalers are removed, seems they don't matter
+            return tf.reduce_sum(tf.square(sy_z), axis=1)
 
     @lazy_property
     def loss(self):
@@ -116,8 +131,21 @@ class PGAgent(object):
         return tf.train.AdamOptimizer(learning_rate).minimize(self.loss)
 
     @lazy_property
+    def sy_cont_action_std(self):
+        return tf.Variable(tf.ones([1, self.act_dim]), dtype=tf.float32)
+
+    @lazy_property
     def sy_sampled_action(self):
-        return tf.multinomial(self.sy_logits, 1)[:, 0]
+        if self.env_is_discrete:
+            return tf.multinomial(self.sy_logits, 1)[:, 0]
+        else:
+            sy_cont_action_mean = self.sy_logits
+            return tf.random_normal(
+                # note off-diagonal elements are 0, meaning no correlation among
+                # different dimensions in the gaussian
+                shape=tf.shape(sy_cont_action_mean),
+                mean=sy_cont_action_mean,
+                stddev=self.sy_cont_action_std)
 
     def normalize(self, data):
         return (data - np.mean(data)) / np.std(data)
